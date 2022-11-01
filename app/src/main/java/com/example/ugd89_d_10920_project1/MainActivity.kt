@@ -1,88 +1,115 @@
 package com.example.ugd89_d_10920_project1
 
-import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
-import android.hardware.*
+import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
-import android.view.View
-import android.widget.FrameLayout
-import android.widget.ImageButton
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.widget.TextView
-import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 
-class MainActivity : AppCompatActivity() {
-    private var mCamera: Camera? = null
-    private var mCameraView: CameraView? = null
-
-    lateinit var sensorStatusTV: TextView
-    lateinit var proximitySensor: Sensor
-    lateinit var sensorManager: SensorManager
-
-    var proximitySensorEventListener: SensorEventListener? = object: SensorEventListener {
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-            // method to check accurary changed in sensor
-        }
-
-        override fun onSensorChanged(event: SensorEvent?) {
-            if (event != null) {
-                if (event.sensor.type == Sensor.TYPE_PROXIMITY) {
-                    if (event.values[0] == 0f) {
-                        // here we are setting our status to our textview..
-                        // if sensor event return 0 then object is closed
-                        // to sensor else object is away from sensor.
-                        mCamera?.release()
-                        mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_FRONT)
-                        if (mCamera != null){
-                            mCameraView = CameraView(this@MainActivity, mCamera!!)
-                            val camera_view = findViewById<View>(R.id.FLCamera) as FrameLayout
-                            camera_view.removeAllViews()
-                            camera_view.addView(mCameraView)
-                        }
-                    }
-                }
-            }
-        }
-    }
+class MainActivity : AppCompatActivity(), SensorEventListener {
+    private val CHANNEL_ID_1 = "channel_notification_01"
+    private val notificationId1 = 101
+    private lateinit var sensorManager: SensorManager
+    private lateinit var square: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        try {
-            mCamera = Camera.open()
-        } catch (e: Exception){
-            Log.d("Error", "Failed to get Camera" + e.message)
-        }
+        createNotificationChannel()
 
-        // on below line we are initializing our sensor manager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        // on below line we are initializing our proximity sensor variable
-        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        // on below line we are checking if the proximity sensor is null
-        if (proximitySensor == null) {
-            // on below line we are displaying a toast if no sensor is available
-            Toast.makeText(this, "No proximity sensor found in device..", Toast.LENGTH_SHORT).show()
-            finish()
-        } else {
-            // on below line we are registering
-            // our sensor with sensor manager
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+        square = findViewById(R.id.tv_square)
+
+        setUpSensorStuff()
+    }
+
+    private fun createNotificationChannel() {
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+            val name = "Notification Title"
+            val descriptionText = "NotificationDescription"
+
+            val channel1 = NotificationChannel(CHANNEL_ID_1, name, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = descriptionText
+            }
+
+            val notificationManager: NotificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel1)
+        }
+    }
+
+    private fun sendNotification1() {
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID_1)
+            .setSmallIcon(R.drawable.ic_baseline_notif)
+            .setContentTitle("Selamat anda sudah berhasil Modul 8 dan 9")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+        with(NotificationManagerCompat.from(this)) {
+            notify(notificationId1, builder.build())
+        }
+    }
+
+    private fun setUpSensorStuff(){
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        // Specify the sensor you want to listen to
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also { accelerometer ->
             sensorManager.registerListener(
-                proximitySensorEventListener,
-                proximitySensor,
-                SensorManager.SENSOR_DELAY_NORMAL
+                this,
+                accelerometer,
+                SensorManager.SENSOR_DELAY_FASTEST,
+                SensorManager.SENSOR_DELAY_FASTEST
             )
         }
+    }
 
-        if (mCamera != null){
-            mCameraView = CameraView(this, mCamera!!)
-            val camera_view = findViewById<View>(R.id.FLCamera) as FrameLayout
-            camera_view.addView(mCameraView)
+    override fun onSensorChanged(event: SensorEvent?) {
+        // Checks for the sensor we have registered
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            //Log.d("Main", "onSensorChanged: sides ${event.values[0]} front/back ${event.values[1]} ")
+            // Sides = Tilting phone left(10) and right(-10)
+            val sides = event.values[0]
+            // Up/Down = Tilting phone up(10), flat (0), upside-down(-10)
+            val upDown = event.values[1]
+            square.apply {
+                rotationX = upDown * 3f
+                rotationY = sides * 3f
+                rotation = -sides
+                translationX = sides * -10
+                translationY = upDown * 10
+            }
+
+            if (upDown.toInt() == 0 && sides.toInt() == 0)
+            {
+                sendNotification1()
+            }
+
+            // Changes the colour of the square if it's completely flat
+//            val color = if (upDown.toInt() == 0 && sides.toInt() == 0) Color.GREEN else Color.RED
+//            square.setBackgroundColor(color)
+//            square.text = "up/down ${upDown.toInt()}\nleft/right${sides.toInt()}"
         }
 
-        @SuppressLint("MissingInflatedId", "LocalSuppress") val imageClose =
-            findViewById<View>(R.id.imgClose) as ImageButton
-        imageClose.setOnClickListener { view: View? -> System.exit(0)}
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        return
+    }
+
+    override fun onDestroy() {
+        sensorManager.unregisterListener(this)
+        super.onDestroy()
     }
 }
